@@ -214,7 +214,7 @@ if __name__ == '__main__':
         dimz = [6]
         wdecay = [1e-04]
         n=1000
-        path = '../data/synthetic/sourcesynthetic_combined.csv'
+        path = './sourcesynthetic_combined.csv'
         test_ratio = 0.15
         val_ratio = min(100, n*(1-test_ratio)*0.3)
         val_ratio = val_ratio / (n*(1-test_ratio))
