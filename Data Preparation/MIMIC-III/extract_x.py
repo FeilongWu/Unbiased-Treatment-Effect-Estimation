@@ -26,7 +26,7 @@ def convert_static(static):
 
 
 if __name__ == '__main__':
-    path = '../ventilation_duration_30.json'
+    path = './ventilation_duration_30.json'
     file = open(path,'r')
     data = json.load(file)
     file.close()
