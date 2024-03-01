@@ -1,0 +1,3 @@
+E2LC can be implemented using both "run_data_aug.py" for VCNet under the folder "VCNet_E2LC" or "test_TransTEE.py" for TransTEE under the folder "TransTEE_E2LC". Both files can run with or without a pretrained plug-in estimators. Plug-in estimators can be pretrained by running the codes in "VCNet" or "TransTEE", otherwise, the E2LC will pretarined the model for itself. 
+
+The sampling distribution is available for VCNet_E2LC, currently not supporting TransTEE.
