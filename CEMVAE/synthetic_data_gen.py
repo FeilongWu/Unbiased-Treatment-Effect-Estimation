@@ -55,7 +55,7 @@ def generate_data(n, dz, nf_cont, nf_disc, x_cont_cof, x_disc_cof, \
 
 
 def export_csv(data, name):
-    path = './source' + name + '.csv'
+    path = './data/source' + name + '.csv'
     with open(path, 'w', newline='') as file:
         writer = csv.writer(file, delimiter = ',')
         for  i in data:
