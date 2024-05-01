@@ -1,4 +1,4 @@
-# This repository hosts the source code for the paper "An End-to-end Learning Approach for Counterfactual Generation and Individual Treatment Effect Estimation". Please check the [Appendix](https://github.com/FeilongWu/Unbiased-Treatment-Effect-Estimation/blob/main/CEMVAE/Appendix.pdf) for the paper for more details about the algorithm and experiments.
+### This repository hosts the source code for the paper "An End-to-end Learning Approach for Counterfactual Generation and Individual Treatment Effect Estimation". Please check the [Appendix](https://github.com/FeilongWu/Unbiased-Treatment-Effect-Estimation/blob/main/CEMVAE/Appendix.pdf) for the paper for more details about the algorithm and experiments.
 
 To generate synthetic data, please use "synthetic_data_gen.py".
 
