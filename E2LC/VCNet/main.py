@@ -244,10 +244,10 @@ if __name__ == "__main__":
                             if cum_loss < best_loss:
                                 best_loss = cum_loss
                                 best_epoch = epoch
-                                torch.save(model.state_dict(), './saved.pt')
+                                torch.save(model.state_dict(), './main_rep' + str(rep) + '.pt')
                             if early_stop(epoch, best_epoch, tol=23):
                                 break
-                        model.load_state_dict(torch.load('./saved.pt'))
+                        model.load_state_dict(torch.load('./main_rep' + str(rep) + '.pt'))
                         mise = evaluate_model(model, data_te, v)
                         Mise.append(mise)
                     export_result(out_path, Mise, num_unit, lr, alpha1, num_grid1)
