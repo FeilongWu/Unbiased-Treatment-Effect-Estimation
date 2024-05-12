@@ -214,6 +214,7 @@ if __name__ == "__main__":
                                                      s=args.s)
                                         model._initialize_weights()
                                         pre_main_dict = torch.load(pre_main_path)
+                                        # delete the parameters of the density head since we do not rely on IPW to train VCNet.
                                         for density_param in [ "density_estimator_head.weight", "density_estimator_head.bias"]:
                                             if density_param in pre_main_dict:
                                                 del pre_main_dict[density_param]
