@@ -208,22 +208,19 @@ if __name__ == "__main__":
                                         ts_optimal, sample_w = get_opt_samples(data_tr, density_model, \
                                                                            parameters_set, t_grid, std_w=std_w)
                                         torch.manual_seed(3)
-                                        main_estimator = main_model(cfg_density, num_grid, cfg, degree, knots,\
-                                                         t_grid=t_grid, s=args.s, ts=ts_optimal)
-                                        main_estimator._initialize_weights() # plug-in estimator
                                         pre_main_path = './main_rep' + str(rep) + '.pt'
-                                        if os.path.exists(pre_main_path):
-                                            main_estimator.load_state_dict(torch.load(pre_main_path))
-                                            print('load pretrained main estimator from checkpoint')
-                                        else:
-                                            main_estimator = pretrain(main_estimator, data_tr, args, rep, tol=25)
-                                            print('finish pretrain main')
-
                                         model = DA_model(cfg_density, num_grid, cfg, cfg_aux, degree, knots,\
                                                      dx, encode, ts_optimal, sample_w, act='relu', t_grid=t_grid, \
                                                      s=args.s)
                                         model._initialize_weights()
-                                        model.main_model.load_state_dict(torch.load(pre_main_path))
+                                        pre_main_dict = torch.load(pre_main_path)
+                                        for density_param in [ "density_estimator_head.weight", "density_estimator_head.bias"]:
+                                            if density_param in pre_main_dict:
+                                                del pre_main_dict[density_param]
+                                        
+                                        model.main_model.load_state_dict(pre_main_dict)
+                                        print('load pretrained main estimator from checkpoint')
+
                                         model = pretrain_aux(model, init_lr, args, data_tr)
                                         print('finish pretrain aux')
                                         optimizer = torch.optim.SGD(model.parameters(), lr=init_lr, momentum=args.momentum, weight_decay=args.wd, nesterov=True)
