@@ -149,18 +149,23 @@ if __name__ == "__main__":
     file.close()
     test_ratio = 0.2
     batch_size = 150
-    hyperparameters = {'mimic':{'num_units':[40], 'lrs':[(0.0001,0.0001)],\
-                                'alphas':[1], 'num_grids':[9],\
-                                'n_layers':[3], 'hiddens':[0.9], 't_grids':[10],\
-                                'dzs':[1], 'std_ws':[1]},\
-                      'eicu':{'num_units':[40], 'lrs':[(0.0001,0.0001)],\
-                                'alphas':[1], 'num_grids':[9],\
-                                'n_layers':[2], 'hiddens':[0.9], 't_grids':[10],\
-                                'dzs':[1], 'std_ws':[10]},\
-                       'synthetic':{'num_units':[50], 'lrs':[(0.0002,0.0002)],\
+    hyperparameters = {'mimic':{'num_units':[60], 'lrs':[(0.001,0.001)],\
+                                'alphas':[0.7], 'num_grids':[9],\
+                                'n_layers':[2], 'hiddens':[0.7], 't_grids':[5],\
+                                'dzs':[1]},\
+                       'eicu':{'num_units':[40], 'lrs':[(0.001,0.001)],\
+                                'alphas':[0.5], 'num_grids':[11],\
+                                'n_layers':[2], 'hiddens':[0.7], 't_grids':[5],\
+                                'dzs':[1]},\
+                       'ihdp':{'num_units':[55], 'lrs':[(0.001,0.001)],\
+                                'alphas':[0.7], 'num_grids':[11],\
+                                'n_layers':[1], 'hiddens':[0.9], 't_grids':[5],\
+                                'dzs':[1]},\
+                       'synthetic':{'num_units':[50], 'lrs':[(0.001,0.001)],\
                                 'alphas':[0.5], 'num_grids':[10],\
-                                'n_layers':[2], 'hiddens':[1.1], 't_grids':[10],\
-                                'dzs':[1.05], 'std_ws':[10]}}[dataset]
+                                'n_layers':[1], 'hiddens':[0.9], 't_grids':[5],\
+                                'dzs':[1]},
+                       }[dataset]
     replications = 5
 
     parameters_set = get_permutations(torch.linspace(1,6,2),2)
