@@ -1,4 +1,4 @@
-##E2LC
+## E2LC
 This repo hosts the implementation of our proposed method E2LC. To run our codes first assure MIMIC-III and MIMIC-IV are installed as a database, which can be query using SQL tools.
 ### Data Preparation
-Go to directory "data_preparation", there are five folders named by the corresponding database. To prepare the specific dataset, just click the go to the associated sub-folder. Then, 
+Go to directory "data_preparation", there are five folders named by the corresponding database. To prepare the specific dataset, just click the go to the associated sub-folder. Then, run the Jupyter Notebook to extract the raw data files, which will be saved automatically. Next, run the "extract_data.py" file to filter the data. This will output a CSV file for training. Finally, run "calibrate_response_IPW.py" to prepare synthetic reference curves for evaluation. This will output a pickle file for testing. For XXX (e.g., MIMICIII-Seda) dataset, place the two files, namely, "XXX.csv" and "XXX_response_curve_calibrate.pickle" under the directory "./E2LC/data/".
