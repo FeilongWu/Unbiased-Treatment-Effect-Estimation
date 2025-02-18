@@ -6,7 +6,11 @@ import numpy as np
 from torch import nn
 from scipy.integrate import romb
 from scipy.stats import beta
+import pickle
 
+
+def sigmoid(x):
+    return 1 / (1 + np.exp(-x))
 
 
 
@@ -75,7 +79,7 @@ def get_opt_samples(data_tr, density_model, parameters, size, std_w=3):
             errors[n] += np.sum(1 / np.exp(propensity.detach().numpy())) * inv_density[n][j]
 
     for i in range(n+1):
-        errors[i] -= np.std(samples[i]) * size *  train_size * std_w
+        errors[i] -= np.var(samples[i]) * size *  train_size * std_w
         
 
     samples[n] = torch.linspace(0,1,size).tolist() # avoid propensity = 0 at t=0/1
@@ -83,18 +87,20 @@ def get_opt_samples(data_tr, density_model, parameters, size, std_w=3):
         rank_error.append((errors[i], i))
     rank_error = sorted(rank_error)
     idx = rank_error[0][1]
+    #if idx  == n:
+    #    print('uniform')
+    #else:
+    #    print(parameters[idx])
     return torch.tensor(samples[idx]).unsqueeze(-1).float(), \
            torch.tensor(inv_density[idx]).reshape(1,size).float()
     
     
 
-def get_patient_outcome(x, v, t, scaling_parameter=10):
-    mu = 4 * (t-0.5)**2*np.sin(np.pi/2*t) * 2 * \
-             ((sum(v[1]*x) / sum(v[2]*x))**0.5 + 10 * sum(v[0]*x))
 
-    return mu
 
-def evaluate_model(model, data, v):
+
+
+def evaluate_model(model, data, response):
     mises = []
     dosage_policy_errors = []
     policy_errors = []
@@ -105,71 +111,81 @@ def evaluate_model(model, data, v):
     num_integration_samples = 2 ** samples_power_of_two + 1
     step_size = 1. / num_integration_samples
     treatment_strengths = np.linspace(np.finfo(float).eps, 1, num_integration_samples)
-
+    ##
+    #pre_y1= np.zeros(65)
+    #count = 0
+    ##
     for batch in data:
         x = batch['x'].float()
+        idx = batch['ids'].float().item()
         t = torch.from_numpy(treatment_strengths).float()
         pre_y = model.get_predict(x,t)
         pred_dose_response = pre_y.flatten().detach().cpu().numpy()
+        ##
+        #pre_y1 += pred_dose_response
+        #count  += 1  
+        ##
         
-        test_data = dict()
+        #test_data = dict()
         patient = x[0].detach().cpu().numpy()
-        test_data['x'] = np.repeat(np.expand_dims(patient, axis=0), num_integration_samples, axis=0)
-        test_data['d'] = treatment_strengths # dosage
+        #test_data['x'] = np.repeat(np.expand_dims(patient, axis=0), num_integration_samples, axis=0)
+        #test_data['d'] = treatment_strengths # dosage
 
-        true_outcomes = [get_patient_outcome(patient, v, d) for d in
-                                 treatment_strengths]
+        true_outcomes = response[idx]
         mise = romb(np.square(true_outcomes - pred_dose_response), dx=step_size)
         mises.append(mise)
-
+    ##
+    #print('predict',(pre_y1 / count).tolist())
+    ##
     return np.sqrt(np.mean(mises))
 
 
 
 def load_data(dataset):
-    file = open('../data/' + dataset + '_metadata.json')
-    meta = json.load(file)
-    file.close()
-    v1 = meta['v1']
-    v2 = meta['v2']
-    v3 = meta['v3']
+    with open('../data/' + dataset + '_response_curve_calibrate.pickle', 'rb') as file:
+        response_data = pickle.load(file)
 
     x = []
     d = []
     y = []
-    file = '../data/' + dataset + '_simulate.csv'
+    ids = []
+    file = '../data/' + dataset + '.csv'
     with open(file) as file1:
         reader = csv.reader(file1, delimiter=',')
         for row in reader:
             #t.append(int(row[0]))
             d.append(float(row[1]))
             y.append(float(row[0]))
+            ids.append(float(row[-1]))
             temp = []
-            for entry in row[2:]:
+            for entry in row[2:-1]:
                 temp.append(float(entry))
             x.append(temp)
     x = np.array(x)
     d = np.array(d)
     y = np.array(y)
-    return x, d, y, [v1,v2,v3]
+    ids = np.array(ids)
+    return x, d, y, ids, response_data
 
-def data_split(x,d,y, test_ratio, num_treatments=1):
+def data_split(x,d,y,ids, test_ratio, num_treatments=1):
     n = len(d)
     idx = np.arange(n)
     np.random.shuffle(idx)
     train_size = int(n * (1 - test_ratio))
     propensity = []
-    data_tr = {'x':[], 't':[],'d':[],'y':[]}
-    data_te = {'x':[], 't':[],'d':[],'y':[]}
+    data_tr = {'x':[], 't':[],'d':[],'y':[], 'ids':[]}
+    data_te = {'x':[], 't':[],'d':[],'y':[], 'ids':[]}
     for i in idx[:train_size]:
         data_tr['x'].append(x[i])
         data_tr['d'].append(d[i])
         data_tr['y'].append(y[i])
+        data_tr['ids'].append(ids[i])
 
     for i in idx[train_size:]:
         data_te['x'].append(x[i])
         data_te['d'].append(d[i])
         data_te['y'].append(y[i])
+        data_te['ids'].append(ids[i])
 
     return data_tr, data_te
 
@@ -185,14 +201,16 @@ class createDS(Dataset):
         dic['x'] = torch.tensor(self.data['x'][idx])
         dic['t'] = torch.tensor(self.data['d'][idx])
         dic['y'] = torch.tensor(self.data['y'][idx])
+        dic['ids'] = torch.tensor(self.data['ids'][idx])
         return dic
 
 
 def export_result(out_path, Mise, num_unit, lr_main, lr_DA, hidden, num_grid1, \
-                  t_grid, n_layer, dz, std_w):
+                  t_grid, n_layer, dz, std_w, y_std):
     row = 'lr_main: ' + str(lr_main) + 'lr_DA: ' + str(lr_DA) + '_num_unit: ' + str(num_unit) + '_hidden: ' + \
           str(hidden) + '_num_grid: ' + str(num_grid1) + '_t_grid'+ str(t_grid)\
-          + '_n_layer'+ str(n_layer) + '_dz'+ str(dz) + '_std_w' + str(std_w) + ' -- '
+          + '_n_layer'+ str(n_layer) + '_dz'+ str(dz) + '_std_w' + str(std_w) + \
+           '_y_std:' + str(y_std) + ' -- '
     row += 'MISE: (' + str(np.mean(Mise)) + ', ' + str(np.std(Mise)) + ')\n'
     file = open(out_path, 'a')
     file.write(row)
