@@ -24,7 +24,6 @@ def init_arg():
     # 25 for mimiciv-seda10
     # 1 for mimiciv-mv
     # 2 for mimiciii-mv10
-    # 3 for mimiciii-mv30
     parser.add_argument("--wd", default=5e-3, type=float)
     parser.add_argument("--momentum", default=0.9, type=float)
     parser.add_argument("--lr_main", default=0.001, type=float)
@@ -246,7 +245,7 @@ if __name__ == "__main__":
     MSE = []
     bias_level = 0.1 # base level = 0
 
-    dataset = 'synthetic'
+    dataset = 'mimiciv_coag'
     with open('../data/' + dataset + '_response_curve_calibrate.pickle', 'rb') as file:
         response_data = pickle.load(file)
     out_path = './DA_ps_' + dataset + '_bias_level_' + str(int(bias_level*100)) + '.txt'
@@ -255,22 +254,54 @@ if __name__ == "__main__":
     file.close()
     test_ratio = 0.2
     batch_size = 150
-    hyperparameters = {'mimic_m4':{'num_units':[40], 'lrs':[(0.0001,0.0001)],\
-                                'alphas':[1], 'num_grids':[9],\
-                                'n_layers':[3], 'hiddens':[0.9], 't_grids':[10],\
-                                'dzs':[1], 'std_ws':[5,0,-5], 'y_stds':[0.005, 0.1,0.5]},\
-                      'eicu':{'num_units':[40], 'lrs':[(0.0001,0.0001)],\
-                                'alphas':[1], 'num_grids':[9],\
+    hyperparameters = {'mimiciii_mv':{'num_units':[44], 'lrs':[(0.0003,0.0003)],\
+                                'alphas':[0.5], 'num_grids':[11],\
+                                'n_layers':[2], 'hiddens':[1.1], 't_grids':[12],\
+                                'dzs':[1.1], 'std_ws':[-100], 'y_stds':[0.005]},\
+                      'eicu_vaso_m2':{'num_units':[35], 'lrs':[(0.0001,0.0001)],\
+                                'alphas':[1], 'num_grids':[11],\
                                 'n_layers':[2], 'hiddens':[0.9], 't_grids':[10],\
-                                'dzs':[1], 'std_ws':[5,0,-5], 'y_stds':[0.005, 0.1,0.5]},\
-                       'synthetic':{'num_units':[50], 'lrs':[(0.0002,0.0002)],\
+                                'dzs':[1], 'std_ws':[10]},\
+                       'mimiciv_mv':{'num_units':[34], 'lrs':[(0.00005,0.00005)],\
+                                'alphas':[0.5], 'num_grids':[11],\
+                                'n_layers':[2], 'hiddens':[0.9], 't_grids':[12],\
+                                'dzs':[1.05], 'std_ws':[100], 'y_stds':[0.005]},
+                       'mimic_vaso_m2':{'num_units':[56], 'lrs':[(0.0001,0.0001)],\
+                                'alphas':[0.5], 'num_grids':[9],\
+                                'n_layers':[2], 'hiddens':[1.0,1.1], 't_grids':[10,13],\
+                                'dzs':[1.05,1.1], 'std_ws':[0]},\
+                       'USCMR_m2':{'num_units':[20], 'lrs':[(0.0001,0.0001)],\
+                                'alphas':[0.5], 'num_grids':[9],\
+                                'n_layers':[2], 'hiddens':[1.0,1.1], 't_grids':[10,13],\
+                                'dzs':[1.05,1.1], 'std_ws':[0]},\
+                       'mimiciv_seda':{'num_units':[32], 'lrs':[(0.0003,0.0003)],\
+                                'alphas':[0.5], 'num_grids':[11],\
+                                'n_layers':[2], 'hiddens':[1.1], 't_grids':[8],\
+                                'dzs':[1.1], 'std_ws':[100],'y_stds':[0.005]},\
+                       'mimiciii_seda':{'num_units':[46], 'lrs':[(0.00005,0.00005)],\
+                                'alphas':[0.5], 'num_grids':[9],\
+                                'n_layers':[2], 'hiddens':[1.0], 't_grids':[12],\
+                                'dzs':[1.1], 'std_ws':[100], 'y_stds':[0.005]},\
+                       'mimic_iv_micr_m2':{'num_units':[40], 'lrs':[(0.001,0.0001),(0.001,0.0001)],\
+                                'alphas':[0.5], 'num_grids':[11],\
+                                'n_layers':[2], 'hiddens':[1.0,1.1], 't_grids':[10,13],\
+                                'dzs':[1.05,1.1], 'std_ws':[0,100]},\
+                       'mimiciv_coag':{'num_units':[38], 'lrs':[(0.00005,0.00005)],\
                                 'alphas':[0.5], 'num_grids':[10],\
-                                'n_layers':[2], 'hiddens':[1.1], 't_grids':[10],\
-                                'dzs':[1.05], 'std_ws':[5,0,-5], 'y_stds':[0.005, 0.1,0.5]}}[dataset]
+                                'n_layers':[2], 'hiddens':[0.9], 't_grids':[8],\
+                                'dzs':[1.1], 'std_ws':[0], 'y_stds':[0.005]},\
+                       'mimic_diur_m2':{'num_units':[54], 'lrs':[(0.001,0.0001)],\
+                                'alphas':[0.5], 'num_grids':[11],\
+                                'n_layers':[2], 'hiddens':[1.0,1.1], 't_grids':[10,13],\
+                                'dzs':[1.05,1.1], 'std_ws':[0,100]},\
+                       'eicu_mv_m2':{'num_units':[74], 'lrs':[(0.0001,0.0001),(0.001,0.001),(0.0003,0.0003),(0.00005,0.00005)],\
+                                'alphas':[0.5], 'num_grids':[9],\
+                                'n_layers':[2], 'hiddens':[0.8,0.9], 't_grids':[8,10],\
+                                'dzs':[1.1,1.2], 'std_ws':[-100,-50,0,50,100]}}[dataset]
     replications = 5
 
 
-    parameters_set = get_permutations(torch.linspace(1,6,10),2)
+    parameters_set = get_permutations(torch.linspace(1,6,8),2)
     # get_permutations(torch.linspace(1,6,10),2) for mimiciii-mv
     # get_permutations(torch.linspace(1,6,8),2) for mimiciv-coag
     # and mimiciv-mv and mimiciv-mv10
