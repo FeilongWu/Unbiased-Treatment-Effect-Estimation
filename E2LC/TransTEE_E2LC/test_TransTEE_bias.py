@@ -255,10 +255,10 @@ if __name__ == "__main__":
     dataset_params['test_fraction'] = args.test_fraction
 
 
-    dataset = 'eicu'
+    dataset = 'mimiciv_coag'
     with open('../data/' + dataset + '_response_curve_calibrate.pickle', 'rb') as file:
         response_data = pickle.load(file)
-    bias_level = 0.1 # base level = 0
+    bias_level = 0.3 # base level = 0
     
     out_path = './TransTEE_' + dataset + '_bias_level_' + str(int(bias_level*100)) + '.txt'
     file = open(out_path, 'w')
@@ -267,21 +267,26 @@ if __name__ == "__main__":
     replications = 5
     args.max_epochs = 500 # use 2 for mimiciii-mv
     # use 5 for mimiciv-mv pretrain 1 for max_epochs
-    # 15 for mimiciv-mv10
     # use 1 for mimiciv-seda
     # 35 for mimiciii-seda20
-    test_ratio = 0.2
+    test_ratio = 0.22
     batch_size = 150
     
-    hyperparameters = {'mimic':{'num_dosage_samples':[5], 'h_inv_eqv_dims':[64],'std_ws':[0.1],\
-                                'h_dims':[62], 'y_stds':[0.5],'hiddens':[0.9]，\
-                                'lrs':[0.001,0.0001],'cov_dims':[80], 't_grids':[5,10,15], 'dzs':[0.9,1.0,1.1]},\
-                       'eicu':{'num_dosage_samples':[5], 'h_inv_eqv_dims':[64],'std_ws':[0.1],\
-                                'h_dims':[36], 'y_stds':[0.5],'hiddens':[0.9]，\
-                                'lrs':[0.001,0.0001],'cov_dims':[100], 't_grids':[5,10,15], 'dzs':[0.9,1.0,1.1]},\
-                       'synthetic':{'num_dosage_samples':[5], 'h_inv_eqv_dims':[64],'std_ws':[0.1],\
-                                'h_dims':[52], 'y_stds':[0.5],'hiddens':[0.9]，\
-                                'lrs':[0.001,0.0001],'cov_dims':[60], 't_grids':[5,10,15], 'dzs':[0.9,1.0,1.1]}}[dataset]
+    hyperparameters = {'mimiciii_mv':{'num_dosage_samples':[5], 'h_inv_eqv_dims':[64],'std_ws':[-250],\
+                                'h_dims':[44], 'y_stds':[0.003],'hiddens':[1.0],\
+                                'lrs':[0.00005],'cov_dims':[38], 't_grids':[8], 'dzs':[1.0]},\
+                       'mimiciv_mv':{'num_dosage_samples':[5], 'h_inv_eqv_dims':[64],'std_ws':[-100 ],\
+                                'h_dims':[34], 'y_stds':[0.005],'hiddens':[0.8],\
+                                'lrs':[0.00005],'cov_dims':[36], 't_grids':[ 2 ], 'dzs':[1.1]},\
+                       'mimiciv_seda':{'num_dosage_samples':[5], 'h_inv_eqv_dims':[64],'std_ws':[100],\
+                                'h_dims':[32], 'y_stds':[0.005],'hiddens':[0.8],\
+                                'lrs':[0.00005],'cov_dims':[30], 't_grids':[17], 'dzs':[1.0]},\
+                       'mimiciii_seda':{'num_dosage_samples':[5], 'h_inv_eqv_dims':[64],'std_ws':[-100],\
+                                'h_dims':[38], 'y_stds':[0.005],'hiddens':[0.9],\
+                                'lrs':[0.00005],'cov_dims':[40], 't_grids':[12], 'dzs':[1.0]},\
+                       'mimiciv_coag':{'num_dosage_samples':[5], 'h_inv_eqv_dims':[64],'std_ws':[100],\
+                                'h_dims':[42], 'y_stds':[0.005], 'alphas':[0.5],'hiddens':[0.9],\
+                                'lrs':[0.00005],'cov_dims':[32], 't_grids':[10], 'dzs':[1.0]}}[dataset]
                     
     result = {}
     result['in'] = []
@@ -315,7 +320,7 @@ if __name__ == "__main__":
                                         args.t_grid = t_grid
                                         
                                         
-                                        torch.manual_seed(3)
+                            
                                         x,t,y,ids,ps = load_data(dataset)
                                         ps = scale_bias(ps, bias_level)
                                         data_tr, data_te,ps_tr = data_split(x,t,y,ids, ps,test_ratio)
@@ -338,6 +343,8 @@ if __name__ == "__main__":
                                         torch.manual_seed(3)
                                         ts_optimal, sample_w = get_opt_samples(data_tr, density_model, \
                                                                            parameters_set, t_grid, std_w=std_w)
+                                        print(ts_optimal)
+                                        #exit(0)
                                         if r == 0 and ts_optimal.tolist() in opt_ts_set[hyper_key]:
                                             break
                                         else:
