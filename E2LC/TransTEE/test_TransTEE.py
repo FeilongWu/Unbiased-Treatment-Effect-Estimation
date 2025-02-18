@@ -154,7 +154,7 @@ if __name__ == "__main__":
 
 
                             best_loss = np.inf
-                            model_pth = '../TransTEE_EM_v2/rep' + str(r) + '.pt'
+                            model_pth = '../TransTEE_E2LC/rep' + str(r) + '.pt'
         
                             for epoch in range(args.max_epochs):
                                 cum_loss = 0
