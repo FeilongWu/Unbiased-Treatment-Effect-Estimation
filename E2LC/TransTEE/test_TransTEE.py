@@ -88,28 +88,31 @@ if __name__ == "__main__":
     dataset_params['test_fraction'] = args.test_fraction
 
 
-    dataset = 'mimic'
+    dataset = 'mimiciv_seda'
     out_path = './TransTEE_' + dataset + '.txt'
     file = open(out_path, 'w')
     file.write('')
     file.close()
     replications = 5
-    args.max_epochs = 500
+    args.max_epochs = 500 # use 4 for mimiciii-mv
     test_ratio = 0.2
     batch_size = 150
     
-    hyperparameters = {'mimic':{'num_dosage_samples':[5], 'h_inv_eqv_dims':[64],\
-                                'h_dims':[62], 'alphas':[0.5],\
-                                'lrs':[0.0001],'cov_dims':[80] },\
-                       'unbiased_eicu':{'num_dosage_samples':[5], 'h_inv_eqv_dims':[64],\
-                                'h_dims':[36], 'alphas':[0.5],\
-                                'lrs':[0.001],'cov_dims':[100] },\
-                       'ihdp':{'num_dosage_samples':[5], 'h_inv_eqv_dims':[64],\
-                                'h_dims':[32,44,56], 'alphas':[0.5],\
-                                'lrs':[0.001,0.0001],'cov_dims':[70,90,110] },\
-                       'synthetic':{'num_dosage_samples':[5], 'h_inv_eqv_dims':[64],\
-                                'h_dims':[52], 'alphas':[0.5],\
-                                'lrs':[0.0001],'cov_dims':[60] }}[dataset]
+    hyperparameters = {'mimiciii_mv':{'num_dosage_samples':[5], 'h_inv_eqv_dims':[64],\
+                                'h_dims':[44], 'alphas':[0.5],\
+                                'lrs':[0.00005],'cov_dims':[38] },\
+                       'mimiciv_mv':{'num_dosage_samples':[5], 'h_inv_eqv_dims':[64],\
+                                'h_dims':[34], 'alphas':[0.5],\
+                                'lrs':[0.00005],'cov_dims':[36]},\
+                       'mimiciv_seda':{'num_dosage_samples':[5], 'h_inv_eqv_dims':[64],\
+                                'h_dims':[32], 'alphas':[0.5],\
+                                'lrs':[0.00005],'cov_dims':[30]},\
+                       'mimiciii_seda':{'num_dosage_samples':[5], 'h_inv_eqv_dims':[64],\
+                                'h_dims':[38], 'alphas':[0.5],\
+                                'lrs':[0.0003],'cov_dims':[40]},\
+                       'mimiciv_coag':{'num_dosage_samples':[5], 'h_inv_eqv_dims':[64],\
+                                'h_dims':[42], 'alphas':[0.5],\
+                                'lrs':[0.001],'cov_dims':[32]}}[dataset]
                     
     result = {}
     result['in'] = []
@@ -129,8 +132,8 @@ if __name__ == "__main__":
                             args.cov_dim = cov_dim
                             
                             torch.manual_seed(3)
-                            x,t,y,v = load_data(dataset)
-                            data_tr, data_te = data_split(x,t,y, test_ratio)
+                            x,t,y,ids,response_data = load_data(dataset)
+                            data_tr, data_te = data_split(x,t,y,ids, test_ratio)
                             data_tr = DataLoader(createDS(data_tr), batch_size=batch_size, shuffle=True)
                             data_te = DataLoader(createDS(data_te), batch_size=1, shuffle=False)
                             params = {'num_features': x.shape[1], 'num_treatments': args.num_treatments,
@@ -143,7 +146,7 @@ if __name__ == "__main__":
                                 TargetReg.cuda()
                                 tr_optimizer = torch.optim.SGD(TargetReg.parameters(), lr=0.001, weight_decay=5e-3)
 
-                            model = TransTEE(params)
+                            model = TransTEE(params, dataset=dataset)
                             print("model have {} paramerters in total".format(sum(x.numel() for x in model.parameters())))
                             model.cuda()
                             optimizer, scheduler = get_optimizer_scheduler(args=args, model=model)
@@ -151,7 +154,7 @@ if __name__ == "__main__":
 
 
                             best_loss = np.inf
-                            model_pth = '../TransTEE_EM/rep' + str(r) + '.pt'
+                            model_pth = '../TransTEE_EM_v2/rep' + str(r) + '.pt'
         
                             for epoch in range(args.max_epochs):
                                 cum_loss = 0
@@ -199,7 +202,7 @@ if __name__ == "__main__":
                                 if early_stop(epoch, best_epoch, tol=25):
                                     break
                             model.load_state_dict(torch.load(model_pth))
-                            mise = evaluate_model(model, data_te, v)
+                            mise = evaluate_model(model, data_te, response_data)
                             Mise.append(mise)
                         if len(Mise) == replications:
                             export_result(out_path, Mise, lr, h_dim, h_inv_eqv_dim, alpha, cov_dim)
