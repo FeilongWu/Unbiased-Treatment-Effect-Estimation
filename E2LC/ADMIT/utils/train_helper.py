@@ -27,13 +27,8 @@ def train(model, dataloader, args, k=5):
     model.train()
     epochs = args.n_epochs
     optimizer = torch.optim.Adam(
-        [
-            {'params' : model.rwt.parameters(), 'weight_decay' : 0},
-            {'params' : model.hidden_features.parameters()},
-            {'params' : model.out.parameters(), 'weight_decay' : 0},
-        ],
-        lr=args.learning_rate, betas=(0.9, 0.999), eps=1e-08, weight_decay=args.weight_decay, 
-        amsgrad=False
+        model.parameters(),
+        lr=args.learning_rate, weight_decay=args.weight_decay
         )
 
     best_loss = np.inf
@@ -53,12 +48,12 @@ def train(model, dataloader, args, k=5):
                 y = batch['y'].float().to(args.device)
             optimizer.zero_grad()
             y_pre, w, _ = model(x, t)
-            loss = rwt_regression_loss(w, y, y_pre)
+            loss = rwt_regression_loss(w, y, y_pre) 
             
             #total_loss.append(loss.data)
             
             
-            mmd = IPM_loss(x, t, w, k=k)
+            mmd = IPM_loss(x, t, w, k=k) 
             mmds.append(mmd.data)
             loss = loss + mmd
             

@@ -87,14 +87,29 @@ def main(dataset='mimic'):
     file = open(out_path, 'w')
     file.write('')
     file.close()
-    hyperparameters = {'mimic':{'num_units':[40,50,60], 'lrs':[0.001, 0.0001, 0.0002],\
-                                'k':[4,5,6]},\
-                       'eicu':{'num_units':[40,50,60], 'lrs':[0.001, 0.0001, 0.0002],\
-                                'k':[4,5,6]},\
-                       'ihdp':{'num_units':[35,45,55], 'lrs':[0.001, 0.0001, 0.0002],\
-                                'k':[4,5,6]}}[dataset]
+    #hyperparameters = {'mimic':{'num_units':[40,50,60], 'lrs':[0.001, 0.0001, 0.0002],\
+    #                            'k':[4,5,6]},\
+    #                   'mimiciii_seda':{'num_units':[38], 'lrs':[0.0003],\
+    #                            'k':[6]},\
+    #                   'ihdp':{'num_units':[35,45,55], 'lrs':[0.001, 0.0001, 0.0002],\
+    #                            'k':[4,5,6]},\
+    #                   'mimic':{'num_units':[40,50,60], 'lrs':[0.001, 0.0001, 0.0002],\
+    #                            'k':[4,5,6]},\
+    #                   'mimiciv_coag':{'num_units':[38], 'lrs':[0.001],\
+    #                            'k':[6]}}[dataset]
+
+    hyperparameters = {'mimiciii_mv':{'num_units':[44], 'lrs':[0.00005],\
+                                'k':[5]},\
+                       'mimiciv_seda':{'num_units':[36], 'lrs':[0.00005],\
+                                'k':[4]},\
+                       'mimiciii_seda':{'num_units':[38], 'lrs':[0.0003],\
+                                'k':[6]},\
+                       'mimiciv_mv':{'num_units':[34], 'lrs':[0.001 ],\
+                                'k':[5]},\
+                       'mimiciv_coag':{'num_units':[38], 'lrs':[0.001],\
+                                'k':[6]}}[dataset]
     replications = 5
-    args.n_epochs = 1000
+    args.n_epochs = 500
 
 
     for num_unit in hyperparameters['num_units']:
@@ -125,5 +140,5 @@ def main(dataset='mimic'):
     
 
 if __name__ == "__main__":
-    dataset = 'mimic'
+    dataset = 'mimiciii_mv'
     main(dataset=dataset)
