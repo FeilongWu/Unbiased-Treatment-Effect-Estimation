@@ -208,7 +208,7 @@ if __name__ == "__main__":
                                 'alphas':[0.5], 'num_grids':[10],\
                                 'n_layers':[2], 'hiddens':[0.9], 't_grids':[8],\
                                 'dzs':[1.1], 'std_ws':[100], 'y_stds':[0.005]}}[dataset]
-    replications = 1
+    replications = 5
     parameters_set = get_permutations(torch.linspace(1,6,10),2)
 
     opt_ts_set = {}
