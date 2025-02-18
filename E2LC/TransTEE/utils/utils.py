@@ -8,15 +8,19 @@ import torch
 from torch.utils.data import Dataset
 import numpy as np
 from scipy.integrate import romb
+import pickle
 
 
-def get_patient_outcome(x, v, t, scaling_parameter=10):
-    mu = 4 * (t-0.5)**2*np.sin(np.pi/2*t) * 2 * \
-             ((sum(v[1]*x) / sum(v[2]*x))**0.5 + 10 * sum(v[0]*x))
 
-    return mu
+def sigmoid(x):
+    return 1 / (1 + np.exp(-x))
 
-def evaluate_model(model, data, v):
+
+
+
+
+
+def evaluate_model(model, data, response ):
     mises = []
     dosage_policy_errors = []
     policy_errors = []
@@ -28,67 +32,96 @@ def evaluate_model(model, data, v):
     step_size = 1. / num_integration_samples
     treatment_strengths = np.linspace(np.finfo(float).eps, 1, num_integration_samples)
 
+    #count = 0
+    #pre_y1 = np.zeros(65)
+
+ #######
+#    x = torch.tensor([[-0.0024028752470471,-0.01579938616009668,-0.01579938616009668,-0.01553670947552708,-0.01579938616009668,-0.01579938616009668,-0.01579938616009668,0.010809761986803761,-0.010020499099565488,-0.015077025277530283,-0.010283175784135089,-0.01509015911175876,0.008892222189445685,-0.006894646553187254,-0.012909942629831085,0.02859297353216566,-0.014591073411076521,-0.0011551609953415014,-0.015457906470156203,-0.012226983249950125,0.02018731962593847,-0.006343025515591094,-0.011938038896923566,0.008366868820306485,0.024652823263621663,0.007841515451167286,0.014933785934546476,-0.010808529153274288,-0.006125003867398327,0.009942928927724084,0.02176337973335607]
+#]).cuda().float()
+#    t = torch.from_numpy(treatment_strengths).cuda().float()
+#    pre_y = model.get_predict(x,t)
+#    print('est curve')
+#    print('pre_y', pre_y.flatten().tolist())
+#    t = torch.tensor([0.0, 0.1111111119389534, 0.2222222238779068, 0.3333333432674408, 0.4444444477558136, 0.5555555820465088, 0.6666666865348816, 0.7777777910232544, 0.8888888955116272, 1.0]
+#).cuda().float()
+#    pre_y = model.get_predict(x,t)
+#    print('sampled')
+#    print('pre_y', pre_y.flatten().tolist())
+    print('reference')
+    print(response[70].tolist())
+
+
+    
+   #########    
+
     for batch in data:
         x = batch['x'].cuda().float()
+        idx = batch['ids'].float().item()
         t = torch.from_numpy(treatment_strengths).cuda().float()
         pre_y = model.get_predict(x,t)
         pred_dose_response = pre_y.flatten().detach().cpu().numpy()
+
+        #pre_y1 += pred_dose_response
+        #count += 1
         
         patient = x[0].detach().cpu().numpy()
 
-        true_outcomes = [get_patient_outcome(patient, v, d) for d in
-                                 treatment_strengths]
+        true_outcomes = response[idx]
         mise = romb(np.square(true_outcomes - pred_dose_response), dx=step_size)
         mises.append(mise)
 
+    #print('pre_y1',(pre_y1/count).tolist())
+    #exit(0)
+
+    
     return np.sqrt(np.mean(mises))
 
 
 
 def load_data(dataset):
-    file = open('../data/' + dataset + '_metadata.json')
-    meta = json.load(file)
-    file.close()
-    v1 = meta['v1']
-    v2 = meta['v2']
-    v3 = meta['v3']
+    with open('../data/' + dataset + '_response_curve_calibrate.pickle', 'rb') as file:
+        response_data = pickle.load(file)
 
     x = []
     d = []
     y = []
-    file = '../data/' + dataset + '_simulate.csv'
+    ids = []
+    file = '../data/' + dataset + '.csv'
     with open(file) as file1:
         reader = csv.reader(file1, delimiter=',')
         for row in reader:
             #t.append(int(row[0]))
             d.append(float(row[1]))
             y.append(float(row[0]))
+            ids.append(float(row[-1]))
             temp = []
-            for entry in row[2:]:
+            for entry in row[2:-1]:
                 temp.append(float(entry))
             x.append(temp)
     x = np.array(x)
     d = np.array(d)
     y = np.array(y)
-    return x, d, y, [v1,v2,v3]
+    return x, d, y, ids, response_data
 
-def data_split(x,d,y, test_ratio, num_treatments=1):
+def data_split(x,d,y,ids, test_ratio, num_treatments=1):
     n = len(d)
     idx = np.arange(n)
     np.random.shuffle(idx)
     train_size = int(n * (1 - test_ratio))
     propensity = []
-    data_tr = {'x':[], 't':[],'d':[],'y':[]}
-    data_te = {'x':[], 't':[],'d':[],'y':[]}
+    data_tr = {'x':[], 't':[],'d':[],'y':[], 'ids':[]}
+    data_te = {'x':[], 't':[],'d':[],'y':[], 'ids':[]}
     for i in idx[:train_size]:
         data_tr['x'].append(x[i])
         data_tr['d'].append(d[i])
         data_tr['y'].append(y[i])
+        data_tr['ids'].append(ids[i])
 
     for i in idx[train_size:]:
         data_te['x'].append(x[i])
         data_te['d'].append(d[i])
         data_te['y'].append(y[i])
+        data_te['ids'].append(ids[i])
 
     return data_tr, data_te
 
@@ -104,6 +137,7 @@ class createDS(Dataset):
         dic['x'] = torch.tensor(self.data['x'][idx])
         dic['t'] = torch.tensor(self.data['d'][idx])
         dic['y'] = torch.tensor(self.data['y'][idx])
+        dic['ids'] = torch.tensor(self.data['ids'][idx])
         return dic
 
 
