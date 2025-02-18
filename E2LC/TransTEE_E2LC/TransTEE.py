@@ -10,6 +10,18 @@ import numpy as np
 # 0.015
 
 
+def find_act(act):
+    # act: function name
+    if act.lower() == 'relu':
+        actv = nn.ReLU()
+    elif act.lower() == 'sigmoid':
+        actv = nn.Sigmoid()
+    elif act.lower() == 'softplus':
+        actv = nn.Softplus()
+    elif act.lower() == 'elu':
+        actv = nn.ELU()
+    return actv
+
 class Linear(nn.Module):
     def __init__(self, ind, outd, act='relu', isbias=1):
         super(Linear, self).__init__()
@@ -49,25 +61,36 @@ class Linear(nn.Module):
 
 
 class auxiliary_model(nn.Module):
-    def __init__(self, params, ts, num_heads=2, att_layers=1, dropout=0.0, \
-                 init_range_f=0.1, init_range_t=0.1):
+    def __init__(self, params, ts, sample_w, num_heads=2, att_layers=1, dropout=0.0, \
+                 init_range_f=0.1, init_range_t=0.1,act='relu', dataset='reg'):
         super(auxiliary_model, self).__init__()
         
         num_features = params['num_features'] + params['t_grid']
         num_treatments = params['num_treatments']
         self.dx = params['num_features']
 
-        h_dim = params['h_dim']
+        dz1 = params['dz1']
+        dz1 += dz1 % 2
+        h_dim = dz1
         self.t_grid = params['t_grid']
         self.s = params['s']
         self.ts = ts
+        self.sample_w = sample_w
         #self.h_inv_eqv_dim = params['h_inv_eqv_dim']
         self.batch_size = params['batch_size']
         #self.alpha = params['alpha']
         #self.num_dosage_samples = params['num_dosage_samples']
         
-        self.cov_dim = int(params['cov_dim'] * params['dz'])
-        self.linear1 = nn.Linear(num_features, self.cov_dim)
+        self.cov_dim = dz1 
+        params['encode'][-1] = (params['encode'][-1][0],dz1)
+        
+        encoder = []
+        for i in params['encode']: # encode
+           encoder.append(nn.Linear(i[0], i[1]))
+           encoder.append(find_act(act))
+        del encoder[-1]
+
+        self.linear1 = nn.Sequential(*encoder)
 
         self.feature_weight = Embeddings(h_dim, initrange=init_range_f)
         self.treat_emb = Embeddings(h_dim, act='id', initrange=init_range_t)
@@ -84,12 +107,21 @@ class auxiliary_model(nn.Module):
         decoder_layers = TransformerDecoderLayer(h_dim, nhead=num_heads, dim_feedforward=h_dim, dropout=dropout,num_t=1)
         self.decoder = TransformerDecoder(decoder_layers, att_layers)
 
-        self.Q = MLP(
+        if 'seda' in dataset:
+            self.Q = MLP(
+            dim_input=h_dim,
+            dim_hidden=h_dim,
+            dim_output=1,
+            is_output_activation=True,
+            activation = 'sigmoid'
+            )
+        else:
+            self.Q = MLP(
             dim_input=h_dim,
             dim_hidden=h_dim,
             dim_output=1,
             is_output_activation=False,
-        )
+            )
 
 
     def get_loss(self, xy, y_f, t_f, d_f, s):
@@ -115,7 +147,8 @@ class auxiliary_model(nn.Module):
             out = torch.mean(out, dim=1)
         pre_y_cf = self.Q(out.squeeze(0)).reshape(bs*s, self.t_grid)
         y_cf = xy[:,self.dx:]
-        loss_y = torch.mean((y_cf - pre_y_cf)**2)
+        sample_w = self.sample_w.repeat(bs*s,1)
+        loss_y = torch.mean(((y_cf - pre_y_cf)**2) * sample_w)
 
         tgt = torch.cat([self.treat_emb(t_f), self.dosage_emb(d_f)], dim=-1)
         tgt = self.linear2(tgt)
@@ -136,8 +169,8 @@ class auxiliary_model(nn.Module):
 
 # Repalce dynamic-Q by feature embeddings, it works well
 class main_model(nn.Module):
-    def __init__(self, params, num_heads=2, att_layers=1, dropout=0.0, \
-                 init_range_f=0.1, init_range_t=0.1):
+    def __init__(self, params, ts, num_heads=2, att_layers=1, dropout=0.0, \
+                 init_range_f=0.1, init_range_t=0.1, dataset='reg', y_std=0.01):
         super(main_model, self).__init__()
         """
         cfg_density: cfg for the density estimator; [(ind1, outd1, isbias1), 'act', ....]; the cfg for density estimator head is not included
@@ -145,6 +178,7 @@ class main_model(nn.Module):
         """
 
         # cfg/cfg_density = [(ind1, outd1, isbias1, activation),....]
+        self.y_std = y_std
         num_features = params['num_features']
         num_treatments = params['num_treatments']
         self.dx = num_features
@@ -152,7 +186,7 @@ class main_model(nn.Module):
         h_dim = params['h_dim']
         self.t_grid = params['t_grid']
         self.s = params['s']
-        self.ts = torch.linspace(0, 1, self.t_grid).view(self.t_grid, 1).cuda().detach().float()
+        self.ts = ts
         #self.h_inv_eqv_dim = params['h_inv_eqv_dim']
         self.batch_size = params['batch_size']
         #self.alpha = params['alpha']
@@ -174,13 +208,21 @@ class main_model(nn.Module):
 
         decoder_layers = TransformerDecoderLayer(h_dim, nhead=num_heads, dim_feedforward=h_dim, dropout=dropout,num_t=1)
         self.decoder = TransformerDecoder(decoder_layers, att_layers)
-
-        self.Q = MLP(
+        if 'seda' in dataset:
+            self.Q = MLP(
+            dim_input=h_dim,
+            dim_hidden=h_dim,
+            dim_output=1,
+            is_output_activation=True,
+            activation='sigmoid'
+            )
+        else:
+            self.Q = MLP(
             dim_input=h_dim,
             dim_hidden=h_dim,
             dim_output=1,
             is_output_activation=False,
-        )
+            )
 
     def forward(self, x, t, d):
         hidden = self.feature_weight(self.linear1(x))
@@ -235,7 +277,7 @@ class main_model(nn.Module):
             if out.shape[0] != 1:
                 out = torch.mean(out, dim=1)
             y_mu = self.Q(out.squeeze(0))
-            y_std = torch.ones_like(y_mu)/2
+            y_std = torch.ones_like(y_mu) * self.y_std
             y_dist = dist.Normal(y_mu, y_std)
             y_s = y_dist.rsample(sample_shape=[self.s]).reshape(self.s,self.t_grid,bs).\
                   transpose(1,2).reshape(bs*self.s,self.t_grid)
@@ -286,12 +328,11 @@ class main_model(nn.Module):
 
 
 class DA_model(nn.Module):
-    def __init__(self, params, num_heads=2, att_layers=1, dropout=0.0, \
-                 init_range_f=0.1, init_range_t=0.1):
+    def __init__(self, params, ts, sample_w, num_heads=2, att_layers=1, dropout=0.0, \
+                 init_range_f=0.1, init_range_t=0.1, dataset='reg', y_std=0.01):
         super(DA_model, self).__init__()
-        self.main_model = main_model(params)
-        ts = self.main_model.ts
-        self.auxiliary_model = auxiliary_model(params, ts)
+        self.main_model = main_model(params, ts, dataset=dataset, y_std=y_std)
+        self.auxiliary_model = auxiliary_model(params, ts, sample_w, dataset=dataset)
         
         
 
