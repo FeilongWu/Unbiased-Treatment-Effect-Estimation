@@ -2,47 +2,17 @@ import torch
 import math
 import numpy as np
 import os
-import copy
+import csv
+import json
 from torch.utils.data import DataLoader, WeightedRandomSampler
-from utils import *
-from DA_model import main_model, DA_model
-import pickle
-#import pyro
-from CNF import ConditionalNormalizingFlow
 
+from models.dynamic_net import Vcnet, Drnet, TR
+from utils.eval import *
+import pickle
 
 import argparse
 
 
-def init_arg():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--test_fraction", default=0.2, type=float)
-    parser.add_argument("--batch_size", default=128, type=int)
-    parser.add_argument("--num_unit", default=60, type=int)
-    parser.add_argument("--alpha", default=1.0, type=float)
-    parser.add_argument("--epochs", default=500, type=int) # 3 for mimiciii-mv, 30 for mimiciv-seda
-    # 25 for mimiciv-seda10
-    # 1 for mimiciv-mv
-    # 2 for mimiciii-mv10
-    # 3 for mimiciii-mv30
-    parser.add_argument("--wd", default=5e-3, type=float)
-    parser.add_argument("--momentum", default=0.9, type=float)
-    parser.add_argument("--lr_main", default=0.001, type=float)
-    parser.add_argument("--lr_DA", default=0.001, type=float)
-    parser.add_argument("--num_grid", default=10, type=int)
-    parser.add_argument("--mu_d", default=3, type=int)
-    parser.add_argument("--t_grid", default=40, type=int) # samples of t
-    parser.add_argument("--sz", default=40, type=int) # samples of z
-    parser.add_argument("--dz", default=30, type=int) # dim of z
-    parser.add_argument("--n_layer", default=3, type=int) # hidden layer
-    parser.add_argument("--hidden", default=90, type=int) # 1st hidden layer size
-    parser.add_argument("--actv", default='relu', type=str)
-    parser.add_argument("--s", default=45, type=int) # sample of y
-    parser.add_argument("--y_std", default=0.5, type=float) 
-
-    
-    
-    return parser.parse_args()
 
 def load_data(dataset):
 ##    file = open('../data/' + dataset + '_metadata.json')
@@ -109,288 +79,214 @@ def data_split(x,d,y,ids, ps, test_ratio, num_treatments=1):
     return data_tr, data_te, ps_tr
 
 
-    
-def pretrain(model, data, args, tol=25):
-    optimizer = torch.optim.SGD(model.parameters(), lr=args.lr_main, \
-                                momentum=args.momentum, weight_decay=args.wd, \
-                                nesterov=True)
-    best_loss = np.inf
-    for epoch in range(args.epochs):
-        cum_loss = 0
-        for idx, batch in enumerate(data):
-            x=batch['x'].float()
-            t=batch['t'].float()
-            y=batch['y'].float()
-            loss, loss1 = model.get_loss(x,t,y,requires_sample=0)
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
-            cum_loss += loss1
-        if best_loss > cum_loss:
-            best_loss = cum_loss
-            best_epoch = epoch
-            torch.save(model.state_dict(), './main_model.pt')
-        if early_stop(epoch, best_epoch, tol=tol):
-            break
-    model.load_state_dict(torch.load('./main_model.pt'))
-    return model
+
+def adjust_learning_rate(optimizer, init_lr, epoch):
+    if lr_type == 'cos':  # cos without warm-up
+        lr = 0.5 * init_lr * (1 + math.cos(math.pi * epoch / num_epoch))
+    elif lr_type == 'exp':
+        step = 1
+        decay = 0.96
+        lr = init_lr * (decay ** (epoch // step))
+    elif lr_type == 'fixed':
+        lr = init_lr
+    else:
+        raise NotImplementedError
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
+    return lr
+
+def save_checkpoint(state, checkpoint_dir='.'):
+    filename = os.path.join(checkpoint_dir, model_name + '_ckpt.pth.tar')
+    print('=> Saving checkpoint to {}'.format(filename))
+    torch.save(state, filename)
+
+# criterion
+def criterion(out, y, alpha=0.5, epsilon=1e-6):
+    return ((out[1].squeeze() - y.squeeze())**2).mean() - alpha * torch.log(out[0] + epsilon).mean()
+
+def criterion_TR(out, trg, y, beta=1., epsilon=1e-6):
+    # out[1] is Q
+    # out[0] is g
+    return beta * ((y.squeeze() - trg.squeeze()/(out[0].squeeze() + epsilon) - out[1].squeeze())**2).mean()
 
 
 
-def pretrain_aux(model, init_lr, args, data_tr):
-    optimizer = torch.optim.SGD(model.parameters(), lr=init_lr, momentum=args.momentum, weight_decay=args.wd, nesterov=True)
-    best_loss = np.inf
-    for epoch in range(args.epochs):
-        cum_loss = 0
-
-        for idx, batch in enumerate(data_tr):
-             x=batch['x'].float()
-             t=batch['t'].float()
-             y=batch['y'].float()
-
-             loss = model.get_pretrain_aux_loss(x,t,y)
-             loss.backward()
-             optimizer.step()
-             optimizer.zero_grad()
-             cum_loss += loss.item()
-        if cum_loss < best_loss:
-            best_loss = cum_loss
-            best_epoch = epoch
-            torch.save(model.state_dict(), './saved.pt')
-        if early_stop(epoch, best_epoch, tol=10):
-            break
-    model.load_state_dict(torch.load('./saved.pt'))
-    return model
-
-def CNF_best_loss(model, data_tr, path, args, lr, tol=12):
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    best_loss = np.inf
-    for epoch in range(args.epochs):
-        cum_loss = 0
-        for idx, batch in enumerate(data_tr):
-            x=batch['x'].float()
-            t=batch['t'].unsqueeze(-1).float()
-            t -= 0.5
-            t += torch.randn_like(t) * 0.1
-            t = torch.clip(t, -0.5, 0.5)
-            loss = -model.log_prob(t, x).mean()
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
-            cum_loss += loss.item()
-        if cum_loss < best_loss:
-           best_loss = cum_loss
-           best_epoch = epoch
-           torch.save(model.state_dict(), path)
-        if early_stop(epoch, best_epoch, tol=tol):
-           break
-    return float(best_loss)
-
-def train_CNF(model, data_tr, path, args, tol=12, lrs = [0.001,0.0003,0.0001,0.00005]):
-    # choose best lr
-    lr_loss = {}
-    for lr in lrs:
-        lr_loss[lr] = CNF_best_loss(copy.deepcopy(model), data_tr, path, args, lr)
-    loss_lr = []
-    for i in lr_loss:
-        loss_lr.append((lr_loss[i],i))
-    best_lr = sorted(loss_lr)[0][1]
-    optimizer = torch.optim.Adam(model.parameters(), lr=best_lr)
-    best_loss = np.inf
-    for epoch in range(args.epochs):
-        cum_loss = 0
-        for idx, batch in enumerate(data_tr):
-            x=batch['x'].float()
-            t=batch['t'].unsqueeze(-1).float()
-            t -= 0.5
-            t += torch.randn_like(t) * 0.1
-            t = torch.clip(t, -0.5, 0.5)
-            loss = -model.log_prob(t, x).mean()
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
-            cum_loss += loss.item()
-        if cum_loss < best_loss:
-           best_loss = cum_loss
-           best_epoch = epoch
-           torch.save(model.state_dict(), path)
-        if early_stop(epoch, best_epoch, tol=tol):
-           break
-    model.load_state_dict(torch.load(path))
-    return model
+def export_result(out_path, Mise, num_unit, lr, alpha1, num_grid1):
+    row = 'lr: ' + str(lr) + '_num_unit: ' + str(num_unit) + '_alpha: ' + \
+          str(alpha1) + '_num_grid: ' + str(num_grid1) + ' -- '
+    row += 'MISE: (' + str(np.mean(Mise)) + ', ' + str(np.std(Mise)) + ')\n'
+    file = open(out_path, 'a')
+    file.write(row)
+    file.close()
 
 
-def get_layer_size(dx, hidden, n_layer, dz):
-    size = [(dx, hidden)]
-    interval = (hidden - dz) / (n_layer+1)
-    for i in range(n_layer):
-        last_out = size[-1][1]
-        new_in = int(last_out - interval)
-        size.append((last_out, new_in))
-    size.append((new_in, dz))
-    return size
-        
+def early_stop(epoch, best_epoch, tol=17):
+    if epoch - best_epoch > tol:
+        return True
+    else:
+        return False
 
 
 
 
     
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='train with simulate data')
 
-    args = init_arg()
+    # i/o
+    parser.add_argument('--data_dir', type=str, default='dataset/simu1/eval/0', help='dir of eval dataset')
+    parser.add_argument('--save_dir', type=str, default='logs/simu1/eval', help='dir to save result')
 
+    # training
+    parser.add_argument('--n_epochs', type=int, default=8, help='num of epochs to train')
 
-    #num_epoch = args.epochs
+    # print train info
+    parser.add_argument('--verbose', type=int, default=100, help='print train info freq')
 
+    # plot adrf
+    parser.add_argument('--plt_adrf', type=bool, default=True, help='whether to plot adrf curves. (only run two methods if set true; '
+                                                                    'the label of fig is only for drnet and vcnet in a certain order)')
 
+    args = parser.parse_args()
+
+    # optimizer
+    lr_type = 'fixed'
+    wd = 5e-3
+    momentum = 0.9
+    # targeted regularization optimizer
+    tr_wd = 5e-3
+
+    num_epoch = 500 # 25 for mimiciii-mv, 10 for mimiciv-mv
+
+    # check val loss
+    verbose = args.verbose
+
+    load_path = args.data_dir
+    save_path = args.save_dir
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+
+    grid = []
     MSE = []
     bias_level = 0.1 # base level = 0
 
-    dataset = 'synthetic'
+    dataset = 'mimiciv_coag'
     with open('../data/' + dataset + '_response_curve_calibrate.pickle', 'rb') as file:
         response_data = pickle.load(file)
-    out_path = './DA_ps_' + dataset + '_bias_level_' + str(int(bias_level*100)) + '.txt'
+    out_path = './VCNet_' + dataset + '_bias_level_' + str(int(bias_level*100))\
+               + '.txt'
     file = open(out_path, 'w')
     file.write('')
     file.close()
     test_ratio = 0.2
     batch_size = 150
-    hyperparameters = {'mimic_m4':{'num_units':[40], 'lrs':[(0.0001,0.0001)],\
-                                'alphas':[1], 'num_grids':[9],\
-                                'n_layers':[3], 'hiddens':[0.9], 't_grids':[10],\
-                                'dzs':[1], 'std_ws':[5,0,-5], 'y_stds':[0.005, 0.1,0.5]},\
-                      'eicu':{'num_units':[40], 'lrs':[(0.0001,0.0001)],\
-                                'alphas':[1], 'num_grids':[9],\
-                                'n_layers':[2], 'hiddens':[0.9], 't_grids':[10],\
-                                'dzs':[1], 'std_ws':[5,0,-5], 'y_stds':[0.005, 0.1,0.5]},\
-                       'synthetic':{'num_units':[50], 'lrs':[(0.0002,0.0002)],\
-                                'alphas':[0.5], 'num_grids':[10],\
-                                'n_layers':[2], 'hiddens':[1.1], 't_grids':[10],\
-                                'dzs':[1.05], 'std_ws':[5,0,-5], 'y_stds':[0.005, 0.1,0.5]}}[dataset]
+    hyperparameters = {'mimiciii_mv':{'num_units':[44], 'lrs':[0.00005],\
+                                'alphas':[0.0], \
+                           'num_grids':[11]},\
+                           'num_grids':[9,10,11]},\
+                       'mimiciv_mv':{'num_units':[34], 'lrs':[0.00005],\
+                                'alphas':[0.3], \
+                           'num_grids':[11]},\
+                       'mimiciii_seda':{'num_units':[46], 'lrs':[0.0003],\
+                                'alphas':[0.0], 'num_grids':[9]},\
+                       'mimiciv_seda':{'num_units':[32], 'lrs':[0.0003],\
+                                'alphas':[0.7], 'num_grids':[11]},\
+                       'mimiciv_coag':{'num_units':[38], 'lrs':[0.0003],\
+                                'alphas':[0.0], 'num_grids':[10]}}[dataset]
     replications = 5
 
 
-    parameters_set = get_permutations(torch.linspace(1,6,10),2)
-    # get_permutations(torch.linspace(1,6,10),2) for mimiciii-mv
-    # get_permutations(torch.linspace(1,6,8),2) for mimiciv-coag
-    # and mimiciv-mv and mimiciv-mv10
-
-
-    opt_ts_set = {}
-    for idx, num_unit in enumerate(hyperparameters['num_units']):
-        for lr_main, lr_DA in hyperparameters['lrs']:
-            for hidden in hyperparameters['hiddens']:
+    
+    # choose from {'Tarnet', 'Tarnet_tr', 'Drnet', 'Drnet_tr', 'Vcnet', 'Vcnet_tr'}
+    method_list = [ 'Vcnet_tr']
+    model_name = method_list[0]
+    for num_unit in hyperparameters['num_units']:
+        for lr in hyperparameters['lrs']:
+            for alpha1 in hyperparameters['alphas']:
                 for num_grid1 in hyperparameters['num_grids']:
-                    for n_layer in hyperparameters['n_layers']:
-                        for t_grid in hyperparameters['t_grids']:
-                            for dz in hyperparameters['dzs']:
-                                for y_std in hyperparameters['y_stds']:
-                                    hyper_key = (num_unit,lr_main,lr_DA,hidden,num_grid1,n_layer,t_grid,dz,y_std)
-                                    if hyper_key not in opt_ts_set:
-                                        opt_ts_set[hyper_key] = []
-                                    for std_w in hyperparameters['std_ws']:
-                                        Mise = []
-                                        args.lr_main = lr_main
-                                        num_grid = num_grid1
-                                        cfg = [(num_unit, num_unit, 1, 'relu'), (num_unit, 1, 1, 'id')]
-                                        degree = 2
-                                        knots = [0.33, 0.66]
-
+                    Mise = []
                     
+                    num_grid = num_grid1
+                    cfg = [(num_unit, num_unit, 1, 'relu'), (num_unit, 1, 1, 'id')]
+                    degree = 2
+                    knots = [0.33, 0.66]
             
-                                        init_lr = lr_DA
-                                        np.random.seed(3)
-            
-                                        for rep in range(replications):
-                                            x,t,y,ids,ps = load_data(dataset)
-                                            ps = scale_bias(ps, bias_level)
-                                            dx = x.shape[1]
-                                            hidden1 = int((t_grid + dx)*hidden)
-                                            dz1 = int(num_unit * dz)
-                                            encode = get_layer_size(dx+t_grid, hidden1, n_layer, dz1)
-                                            cfg_aux = [(dz1, dz1, 1, 'relu'), (dz1, 1, 1, 'id')]
-                                            cfg_density = [(dx, num_unit, 1, 'relu'), (num_unit, num_unit, 1, 'relu')]
-                                            data_tr, data_te,ps_tr = data_split(x,t,y, ids, ps,test_ratio)
-                                            sampler = WeightedRandomSampler(ps_tr, batch_size, replacement=False if batch_size<len(ps_tr) else True)
-                                        
-                                            
+                    if model_name == 'Vcnet_tr' or model_name == 'Drnet_tr' or model_name == 'Tarnet_tr':
+                        isTargetReg = 1
+                    else:
+                        isTargetReg = 0
+                    if isTargetReg:
+                        tr_knots = list(np.arange(0.1, 1, 0.1))
+                        tr_degree = 2
+                        TargetReg = TR(tr_degree, tr_knots)
+                        TargetReg._initialize_weights()
+                    if model_name == 'Vcnet':
+                        init_lr = lr
+                        alpha = alpha1
+                    elif model_name == 'Vcnet_tr':
+                        init_lr = lr
+                        alpha = alpha1
+                        tr_init_lr = 0.001
+                        beta = 1.
 
-                                            data_tr = DataLoader(createDS(data_tr), batch_size=batch_size, sampler=sampler)
-                                            data_te = DataLoader(createDS(data_te), batch_size=1, shuffle=False)
-                                            density_model_path = './CNF.pt'
-                                            density_model = ConditionalNormalizingFlow(input_dim=1, split_dim=0, \
-                                                                               context_dim=dx, hidden_dim=num_unit, \
-                                                                               num_layers=2, flow_length=1, \
-                                                                               count_bins=5, order='quadratic', \
-                                                                               bound=0.5, use_cuda=False)
-                                            density_model = train_CNF(density_model, data_tr, \
-                                                                      density_model_path, args)
-                                            ts_optimal, sample_w = get_opt_samples(data_tr, density_model, \
-                                                                           parameters_set, t_grid, std_w=std_w)
-                                            if rep == 0 and ts_optimal.tolist() in opt_ts_set[hyper_key]:
-                                                break
-                                            else:
-                                                opt_ts_set[hyper_key].append(ts_optimal.tolist())
-                                            torch.manual_seed(3)
-                                        
-                                            main_estimator = main_model(cfg_density, num_grid, cfg, degree, knots,\
-                                                         t_grid=t_grid, s=args.s, ts=ts_optimal, dataset=dataset,\
-                                                                        y_std=y_std)
-                                            main_estimator._initialize_weights()
-                                            pre_main_path = './main_rep' + str(rep) + '.pt'
-                                            
+                    np.random.seed(3)
+                    for rep in range(replications):
+                        torch.manual_seed(3)
+                        x,t,y,ids,ps = load_data(dataset)
+                        ps = scale_bias(ps, bias_level)
+                        cfg_density = [(x.shape[1], num_unit, 1, 'relu'), (num_unit, num_unit, 1, 'relu')]
+                        data_tr, data_te,ps_tr = data_split(x,t,y,ids, ps,test_ratio)
+                        sampler = WeightedRandomSampler(ps_tr, batch_size, replacement=False if batch_size<len(ps_tr) else True)
+                        data_tr = DataLoader(createDS(data_tr), batch_size=batch_size,
+                                             sampler=sampler)
+                        data_te = DataLoader(createDS(data_te), batch_size=1, shuffle=False)
+                        model = Vcnet(cfg_density, num_grid, cfg, degree, knots, dataset=dataset)
+                        model._initialize_weights()
+                        optimizer = torch.optim.SGD(model.parameters(), lr=init_lr, momentum=momentum, weight_decay=wd, nesterov=True)
 
-                                            model = DA_model(cfg_density, num_grid, cfg, cfg_aux, degree, knots,\
-                                                     dx, encode, ts_optimal, sample_w, act='relu', t_grid=t_grid, \
-                                                     s=args.s, dataset=dataset,y_std=y_std)
-                                            model._initialize_weights()
-                                            
-                                            pre_main_dict = torch.load(pre_main_path)
-                                            for density_param in [ "density_estimator_head.weight", "density_estimator_head.bias"]:
-                                                if density_param in pre_main_dict:
-                                                    del pre_main_dict[density_param]
-                                            model.main_model.load_state_dict(pre_main_dict)
-                                            try:
-                                                model = pretrain_aux(model, init_lr, args, data_tr)
-                                                print('finish pretrain aux')
-                                            except UnboundLocalError:
-                                                print('local variable **best_epoch** referenced before assignment')
-                                                break
-                                            optimizer = torch.optim.SGD(model.parameters(), lr=init_lr, momentum=args.momentum, weight_decay=args.wd, nesterov=True)
+                        if isTargetReg:
+                            tr_optimizer = torch.optim.SGD(TargetReg.parameters(), lr=tr_init_lr, weight_decay=tr_wd)
+    
+                            # x: 2d array, t: 1d vector, y: 1d vector
+                        best_loss = np.inf
+                        for epoch in range(num_epoch):
+                            cum_loss = 0
 
-                                # x: 2d array, t: 1d vector, y: 1d vector
-                                            try:
-                                                best_loss = np.inf
-                                                for epoch in range(args.epochs):
-                                                    cum_loss = 0
+                            for idx, batch in enumerate(data_tr):
+                                x=batch['x'].float()
+                                t=batch['t'].float()
+                                y=batch['y'].float()
 
-                                                    for idx, batch in enumerate(data_tr):
-                                                        x=batch['x'].float()
-                                                        t=batch['t'].float()
-                                                        y=batch['y'].float()
+                                if isTargetReg:
+                                    optimizer.zero_grad()
+                                    out = model.forward(t, x)
+                                    trg = TargetReg(t)
+                                    loss = criterion(out, y, alpha=alpha) + criterion_TR(out, trg, y, beta=beta)
+                                    loss.backward()
+                                    optimizer.step()
 
-                                                        loss = model.get_loss(x,t,y)
-                                                        loss.backward()
-                                                        optimizer.step()
-                                                        optimizer.zero_grad()
-                                                        optimizer.lr = (args.epochs - epoch) / args.epochs\
-                                                                   * init_lr
-                                                        cum_loss += loss.item()
-                                                    if cum_loss < best_loss:
-                                                        best_loss = cum_loss
-                                                        best_epoch = epoch
-                                                        torch.save(model.state_dict(), './saved.pt')
-                                                    if early_stop(epoch, best_epoch, tol=25):
-                                                        break
-                                                model.load_state_dict(torch.load('./saved.pt'))
-                                                mise = evaluate_model(model, data_te, response_data)
-                                        #print(('mise',mise))
-                                        #exit(0)
-                                                Mise.append(mise)
-                                            except ValueError:
-                                                print('Error')
-                                                break
-                                        if len(Mise) == replications:
-                                            export_result(out_path, Mise, num_unit, lr_main, lr_DA, hidden, num_grid1, t_grid,\
-                                                  n_layer, dz, std_w, y_std)
+                                    tr_optimizer.zero_grad()
+                                    out = model.forward(t, x)
+                                    trg = TargetReg(t)
+                                    tr_loss = criterion_TR(out, trg, y, beta=beta)
+                                    tr_loss.backward()
+                                    tr_optimizer.step()
+                                    cum_loss += loss.item() + tr_loss.item()
+                                else:
+                                    optimizer.zero_grad()
+                                    out = model.forward(t, x)
+                                    loss = criterion(out, y, alpha=alpha)
+                                    loss.backward()
+                                    optimizer.step()
+                                    cum_loss += loss.item()
+                            if cum_loss < best_loss:
+                                best_loss = cum_loss
+                                best_epoch = epoch
+                                torch.save(model.state_dict(), 'main_rep' + str(rep) + '.pt')
+                            if early_stop(epoch, best_epoch, tol=23):
+                                break
+                        model.load_state_dict(torch.load('main_rep' + str(rep) + '.pt'))
+                        mise = evaluate_model(model, data_te, response_data)
+                        Mise.append(mise)
+                    export_result(out_path, Mise, num_unit, lr, alpha1, num_grid1)
 
