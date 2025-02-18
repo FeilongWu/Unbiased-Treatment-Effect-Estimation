@@ -258,22 +258,10 @@ if __name__ == "__main__":
                                 'alphas':[0.5], 'num_grids':[11],\
                                 'n_layers':[2], 'hiddens':[1.1], 't_grids':[12],\
                                 'dzs':[1.1], 'std_ws':[-100], 'y_stds':[0.005]},\
-                      'eicu_vaso_m2':{'num_units':[35], 'lrs':[(0.0001,0.0001)],\
-                                'alphas':[1], 'num_grids':[11],\
-                                'n_layers':[2], 'hiddens':[0.9], 't_grids':[10],\
-                                'dzs':[1], 'std_ws':[10]},\
                        'mimiciv_mv':{'num_units':[34], 'lrs':[(0.00005,0.00005)],\
                                 'alphas':[0.5], 'num_grids':[11],\
                                 'n_layers':[2], 'hiddens':[0.9], 't_grids':[12],\
                                 'dzs':[1.05], 'std_ws':[100], 'y_stds':[0.005]},
-                       'mimic_vaso_m2':{'num_units':[56], 'lrs':[(0.0001,0.0001)],\
-                                'alphas':[0.5], 'num_grids':[9],\
-                                'n_layers':[2], 'hiddens':[1.0,1.1], 't_grids':[10,13],\
-                                'dzs':[1.05,1.1], 'std_ws':[0]},\
-                       'USCMR_m2':{'num_units':[20], 'lrs':[(0.0001,0.0001)],\
-                                'alphas':[0.5], 'num_grids':[9],\
-                                'n_layers':[2], 'hiddens':[1.0,1.1], 't_grids':[10,13],\
-                                'dzs':[1.05,1.1], 'std_ws':[0]},\
                        'mimiciv_seda':{'num_units':[32], 'lrs':[(0.0003,0.0003)],\
                                 'alphas':[0.5], 'num_grids':[11],\
                                 'n_layers':[2], 'hiddens':[1.1], 't_grids':[8],\
@@ -282,22 +270,10 @@ if __name__ == "__main__":
                                 'alphas':[0.5], 'num_grids':[9],\
                                 'n_layers':[2], 'hiddens':[1.0], 't_grids':[12],\
                                 'dzs':[1.1], 'std_ws':[100], 'y_stds':[0.005]},\
-                       'mimic_iv_micr_m2':{'num_units':[40], 'lrs':[(0.001,0.0001),(0.001,0.0001)],\
-                                'alphas':[0.5], 'num_grids':[11],\
-                                'n_layers':[2], 'hiddens':[1.0,1.1], 't_grids':[10,13],\
-                                'dzs':[1.05,1.1], 'std_ws':[0,100]},\
                        'mimiciv_coag':{'num_units':[38], 'lrs':[(0.00005,0.00005)],\
                                 'alphas':[0.5], 'num_grids':[10],\
                                 'n_layers':[2], 'hiddens':[0.9], 't_grids':[8],\
-                                'dzs':[1.1], 'std_ws':[0], 'y_stds':[0.005]},\
-                       'mimic_diur_m2':{'num_units':[54], 'lrs':[(0.001,0.0001)],\
-                                'alphas':[0.5], 'num_grids':[11],\
-                                'n_layers':[2], 'hiddens':[1.0,1.1], 't_grids':[10,13],\
-                                'dzs':[1.05,1.1], 'std_ws':[0,100]},\
-                       'eicu_mv_m2':{'num_units':[74], 'lrs':[(0.0001,0.0001),(0.001,0.001),(0.0003,0.0003),(0.00005,0.00005)],\
-                                'alphas':[0.5], 'num_grids':[9],\
-                                'n_layers':[2], 'hiddens':[0.8,0.9], 't_grids':[8,10],\
-                                'dzs':[1.1,1.2], 'std_ws':[-100,-50,0,50,100]}}[dataset]
+                                'dzs':[1.1], 'std_ws':[0], 'y_stds':[0.005]}}[dataset]
     replications = 5
 
 
