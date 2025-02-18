@@ -144,9 +144,13 @@ class Dynamic_FC(nn.Module):
 
 class auxiliary_model(nn.Module):
     def __init__(self, dx, encode, cfg, degree, knots, ts=torch.linspace(0,1,10), \
-                 act='relu', sample_w=1):
+                 act='relu', sample_w=1, dataset='reg'):
         super(auxiliary_model, self).__init__()
-        
+
+        if 'seda' in dataset:
+            self.probability=True
+        else:
+            self.probability=False
         self.dx = dx
         self.dz = encode[-1][1]
         self.sample_w = sample_w
@@ -173,7 +177,8 @@ class auxiliary_model(nn.Module):
                 blocks.append(
                     Dynamic_FC(layer_cfg[0], layer_cfg[1], self.degree, self.knots, act=layer_cfg[3], isbias=layer_cfg[2], islastlayer=0))
         blocks.append(last_layer)
-
+        if self.probability:
+            blocks.append(nn.Sigmoid())
 
         self.Q = nn.Sequential(*blocks)
 
@@ -219,7 +224,8 @@ class auxiliary_model(nn.Module):
 
 class main_model(nn.Module):
     def __init__(self, cfg_density, num_grid, cfg, degree, knots,\
-                 t_grid=30, s=20, ts=torch.linspace(0, 1, 10).view(10, 1)):
+                 t_grid=30, s=20, ts=torch.linspace(0, 1, 10).view(10, 1),\
+                 dataset='reg', y_std=0.2):
         super(main_model, self).__init__()
         """
         cfg_density: cfg for the density estimator; [(ind1, outd1, isbias1), 'act', ....]; the cfg for density estimator head is not included
@@ -227,6 +233,10 @@ class main_model(nn.Module):
         """
 
         # cfg/cfg_density = [(ind1, outd1, isbias1, activation),....]
+        if 'seda' in dataset:
+            self.probability=True
+        else:
+            self.probability=False
         self.cfg_density = cfg_density
         self.num_grid = num_grid
 
@@ -239,6 +249,7 @@ class main_model(nn.Module):
         self.dx = cfg_density[0][0]
         self.uniform = dist.Uniform(torch.tensor(0.), torch.tensor(1.))
         self.ts = ts
+        self.y_std = y_std
         
 
         # construct the density estimator
@@ -275,6 +286,8 @@ class main_model(nn.Module):
                 blocks.append(
                     Dynamic_FC(layer_cfg[0], layer_cfg[1], self.degree, self.knots, act=layer_cfg[3], isbias=layer_cfg[2], islastlayer=0))
         blocks.append(last_layer)
+        if self.probability:
+            blocks.append(nn.Sigmoid())
 
 
         self.Q = nn.Sequential(*blocks)
@@ -297,7 +310,7 @@ class main_model(nn.Module):
             t1 = self.ts.repeat(1, bs).view(bs*self.t_grid, 1)
             t_hidden = torch.cat((t1, z), 1)
             y_mu = self.Q(t_hidden)
-            y_std = torch.ones_like(y_mu)/2
+            y_std = torch.ones_like(y_mu) * self.y_std
             y_dist = dist.Normal(y_mu, y_std)
             y_s = y_dist.rsample(sample_shape=[self.s]).reshape(self.s,self.t_grid,bs).\
                   transpose(1,2).reshape(bs*self.s,self.t_grid) # [[y0.1,..,y0.9]_ij,]
@@ -377,13 +390,13 @@ class main_model(nn.Module):
 class DA_model(nn.Module):
     def __init__(self, cfg_density, num_grid, cfg, cfg_aux, degree, knots,\
                  dx, encode, ts, sample_w, act='relu', \
-                 t_grid=30, s=20):
+                 t_grid=30, s=20, dataset='reg',y_std=0.2):
         super(DA_model, self).__init__()
         self.main_model = main_model(cfg_density, num_grid, cfg, degree, knots,\
-                 t_grid=t_grid, s=s, ts=ts)
+                 t_grid=t_grid, s=s, ts=ts,dataset=dataset,y_std=y_std)
         self.auxiliary_model = auxiliary_model(dx, encode, cfg_aux, degree, \
                                                knots, ts=ts, act=act, \
-                                               sample_w=sample_w)
+                                               sample_w=sample_w,dataset=dataset)
         
         
 
