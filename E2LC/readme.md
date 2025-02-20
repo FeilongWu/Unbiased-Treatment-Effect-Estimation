@@ -1,5 +1,5 @@
 ## E2LC
-This repo hosts the implementation of our proposed method E2LC. To run our codes first assure MIMIC-III and MIMIC-IV are installed as a database, which can be query using SQL tools. To install the dependencies, try the following code in command line:
+This repo hosts the implementation of our proposed method E2LC. To run our codes first assure MIMIC-III and MIMIC-IV are installed as a database, which can be queried using SQL tools. Python requires version = 3.7 or newer. To install the dependencies, try the following code in command line:
 ```console
 pip install -r requirements.txt
 ```
