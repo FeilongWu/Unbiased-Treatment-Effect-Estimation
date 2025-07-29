@@ -425,9 +425,9 @@ class createDS(Dataset):
     
 if __name__ == '__main__':
     path_lable = './mimiciv_coag.csv'
-    t_min, t_max_min = 0.01, 0.89
-    y_mu = 66.79177897
-    y_std = 32.0828055957
+    t_min, t_max_min = 0.175, 20.243
+    y_mu = 67.24305
+    y_std = 30.785
 
     path = './mimiciv_coag.csv'
     data = load_data(path) # [y,t,features, ids]
@@ -456,13 +456,12 @@ if __name__ == '__main__':
 
 
 
-    plot_single = True
-    patient_idx = 0 # this is used only when plot_single = True
+    plot_single = False
+    patient_idx = 10 # this is used only when plot_single = True
                     # otherwise, plot average all
     use_IPW = False
 
-    regimes = [(0.0,0.1),(0.1,0.25),(0.25,0.4),(0.4,0.5),(0.5,0.6),
-               (0.6,0.75),(0.75,0.9),(0.9,1.0)]
+    regimes = [(0.0,0.2),(0.2,0.4),(0.4,0.6),(0.6,1.0)]
     
 
 
@@ -472,6 +471,7 @@ if __name__ == '__main__':
                                ty_min_max=[t_min, t_max_min,y_mu,y_std],\
                                plot_single=plot_single,use_IPW=use_IPW,\
                                patient_idx=patient_idx,regimes=regimes)
+
 
 
 
