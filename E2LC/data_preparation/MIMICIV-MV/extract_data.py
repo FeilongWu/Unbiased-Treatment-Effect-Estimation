@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 
 
-def read_data(path, constrains = [2.8,9.3,0.0,930]):
+def read_data(path, constrains = [40,150,25.0,83]):
     # min_t, max_t, min_y, max_y = constrains
     data = []
     with open(path) as file:
@@ -107,12 +107,14 @@ if __name__ == '__main__':
     for i in all_data:
         y.append(i[0])
         x.append(i[1])
-
+    plt.scatter(x,y,alpha=0.1)
+    plt.show()
     #######
 
         
 
     max_t,min_t = max(x), min(x)
+    print('max_t',max_t,'min_t',min_t)
 
     for j,i in enumerate(all_data):
         i[-1] = j # id
