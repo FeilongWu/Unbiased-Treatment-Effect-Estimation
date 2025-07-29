@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 import pickle
 
 
-
-def read_data(path, constrains = [4.5,10.9,0,700]):
+#[20,300,24,92]
+def read_data(path, constrains = [20,300,24,92]):
     # min_t, max_t, min_y, max_y = constrains
     data = []
     with open(path) as file:
@@ -19,21 +19,22 @@ def read_data(path, constrains = [4.5,10.9,0,700]):
     min_t, max_t, min_y, max_y = constrains
     data1 = []
     count = 0
-    file = open('./hypertension.pickle','rb')
-    hypertensions = pickle.load(file)
-    hyper = []
+    #file = open('./hypertension.pickle','rb')
+    #hypertensions = pickle.load(file)
+    #hyper = []
     for idx,i in enumerate(data):
         y,t = i[:2]
         if (min_t <= t) and (t <= max_t) and (min_y <= y) and (y <= max_y):
             data1.append(i)
             data1[-1].append(count)
             count += 1
-            hyper.append(hypertensions[idx])
+            #hyper.append(hypertensions[idx])
     data1 = np.array(data1)
+
     for i in range(2, data1.shape[1]-1):
         data1 = standardize(np.array(data1), col=[i])
-    file = open('./hypertensions1.pickle','wb')
-    pickle.dump(hyper,file)
+    #file = open('./hypertensions1.pickle','wb')
+    #pickle.dump(hyper,file)
     return data1
 
 
@@ -115,15 +116,16 @@ if __name__ == '__main__':
     for i in all_data:
         y.append(i[0])
         x.append(i[1])
-
+    plt.scatter(x,y,alpha=0.1)
     ####        
 
     max_t,min_t = max(x), min(x)
+    print('max_t',max_t,'min_t',min_t)
 
     for j,i in enumerate(all_data):
         i[-1] = j # id
         i[1] = (i[1] - min_t) / (max_t - min_t) # normalize dosage to [0,1]
- 
+    
 
     outpath = './mimiciii_mv.csv' # y and features are standardize to N(0,1)
     all_data = standardize(all_data)
