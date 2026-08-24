@@ -1,0 +1,1 @@
+2023-06-10 14:25:55,874 - __main__ - INFO - {'data': 'sim', 'batch_size': 500, 'learning_rate': 0.0002, 'weight_decay': 0, 'dropout': 0, 'init': 0.01, 'dynamic_type': 'power', 'seed': 8260, 'load_data': False, 'scale': False, 'n_train': 3350, 'n_test': 500}
